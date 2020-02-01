@@ -62,6 +62,7 @@ func ListenAndServe(addr, join, dir, logdir string, consistency, durability finn
 	}
 }
 
+// Machine is the FSM for the Raft consensus
 type Machine struct {
 	mu     sync.RWMutex
 	dir    string
@@ -160,7 +161,7 @@ func (kvm *Machine) Restore(rd io.Reader) error {
 		if _, err := io.ReadFull(r, value); err != nil {
 			return err
 		}
-		if err := kvm.db.Put(string(key), value); err != nil {
+		if err := kvm.db.Put(key, value); err != nil {
 			return err
 		}
 	}
@@ -236,7 +237,7 @@ func (kvm *Machine) Snapshot(wr io.Writer) error {
 	defer kvm.mu.RUnlock()
 	gzw := gzip.NewWriter(wr)
 
-	err := kvm.db.Fold(func(key string) error {
+	err := kvm.db.Fold(func(key []byte) error {
 		var buf []byte
 		value, err := kvm.db.Get(key)
 		if err != nil {
@@ -272,7 +273,7 @@ func (kvm *Machine) cmdSet(
 		func() (interface{}, error) {
 			kvm.mu.Lock()
 			defer kvm.mu.Unlock()
-			return nil, kvm.db.Put(string(cmd.Args[1]), cmd.Args[2])
+			return nil, kvm.db.Put(cmd.Args[1], cmd.Args[2])
 		},
 		func(v interface{}) (interface{}, error) {
 			conn.WriteString("OK")
@@ -293,7 +294,7 @@ func (kvm *Machine) cmdGet(m finn.Applier, conn redcon.Conn, cmd redcon.Command)
 	if len(cmd.Args) != 2 {
 		return nil, finn.ErrWrongNumberOfArguments
 	}
-	key := string(cmd.Args[1])
+	key := cmd.Args[1]
 	return m.Apply(conn, cmd, nil,
 		func(interface{}) (interface{}, error) {
 			kvm.mu.RLock()
@@ -320,7 +321,7 @@ func (kvm *Machine) cmdDel(m finn.Applier, conn redcon.Conn, cmd redcon.Command)
 			defer kvm.mu.Unlock()
 			var n int
 			for i := startIdx; i < len(cmd.Args); i++ {
-				key := string(cmd.Args[i])
+				key := cmd.Args[i]
 				err := kvm.db.Delete(key)
 				if err != nil {
 					return 0, err
@@ -354,7 +355,7 @@ func (kvm *Machine) cmdKeys(m finn.Applier, conn redcon.Conn, cmd redcon.Command
 			var keys [][]byte
 			var values [][]byte
 
-			err := kvm.db.Fold(func(key string) error {
+			err := kvm.db.Fold(func(key []byte) error {
 				keys = append(keys, []byte(key))
 				if withvalues {
 					value, err := kvm.db.Get(key)
