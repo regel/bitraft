@@ -10,11 +10,9 @@
 [![Github all releases](https://img.shields.io/github/downloads/prologic/bitraft/total.svg)](https://github.com/prologic/bitraft/releases)
 
 A [Bitcask](https://github.com/prologic/bitcask) Distributed Key/Value store
-using [Raft](https://github.com/hashicorp/raft) for concensus with a
+using [Raft](https://github.com/hashicorp/raft) for concensus using the
+[uhaha](https://github.com/tidwall/uhaha) library with a
 [Redis](https://redis.org) compatible API written in [Go](https://golang.org).
-
-Based off of [kvnode](https://github.com/tidwall/kvnode).
-(See [LICENSE.old](/LICENSE.old))
 
 - Redis compatible API
 - Bitcask disk-based storage
