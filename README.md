@@ -45,7 +45,7 @@ Commands:
 SET key value
 GET key
 DEL key [key ...]
-KEYS [WITHVALUES]
+KEYS pattern
 FLUSHDB
 SHUTDOWN
 ```
