@@ -1,4 +1,4 @@
-.PHONY: dev build install image release profile bench test clean
+.PHONY: dev build install image release profile bench test clean lint
 
 CGO_ENABLED=0
 VERSION=$(shell git describe --abbrev=0 --tags)
@@ -32,6 +32,9 @@ bench: build
 
 test: build
 	@go test -v -cover -coverprofile=coverage.txt -covermode=atomic -coverpkg=$(shell go list) -race ./...
+
+lint:
+	golangci-lint run
 
 clean:
 	@git clean -f -d -X
