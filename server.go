@@ -5,6 +5,10 @@ import (
 	"compress/gzip"
 	"encoding/binary"
 	"errors"
+	"github.com/prologic/bitcask"
+	log "github.com/sirupsen/logrus"
+	"github.com/tidwall/finn"
+	"github.com/tidwall/redcon"
 	"io"
 	"net"
 	"os"
@@ -13,18 +17,46 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/prologic/bitcask"
-	log "github.com/sirupsen/logrus"
-	"github.com/tidwall/finn"
-	"github.com/tidwall/redcon"
 )
 
 const defaultTCPKeepAlive = time.Minute * 5
 
 var (
-	errSyntaxError = errors.New("syntax error")
+	errWrongNumberOfArguments = errors.New("wrong number of arguments")
 )
+
+func trimPattern(glob string) string {
+	escaped := false
+	pattern := ""
+	for _, char := range glob {
+		switch char {
+		case '\\':
+			escaped = !escaped
+			if !escaped {
+				pattern = pattern + string(char)
+			}
+		case '*':
+			if !escaped {
+				goto out
+			}
+			pattern = pattern + string(char)
+		case '?':
+			if !escaped {
+				goto out
+			}
+			pattern = pattern + string(char)
+		case '[':
+			if !escaped {
+				goto out
+			}
+			pattern = pattern + string(char)
+		default:
+			pattern = pattern + string(char)
+		}
+	}
+out:
+	return pattern
+}
 
 func ListenAndServe(addr, join, dir, logdir string, consistency, durability finn.Level) error {
 	opts := finn.Options{
@@ -339,46 +371,28 @@ func (kvm *Machine) cmdDel(m finn.Applier, conn redcon.Conn, cmd redcon.Command)
 }
 
 func (kvm *Machine) cmdKeys(m finn.Applier, conn redcon.Conn, cmd redcon.Command) (interface{}, error) {
-	var withvalues bool
-	for i := 1; i < len(cmd.Args); i++ {
-		switch strings.ToLower(string(cmd.Args[i])) {
-		default:
-			return nil, errSyntaxError
-		case "withvalues":
-			withvalues = true
-		}
+	if len(cmd.Args) != 2 {
+		return nil, errWrongNumberOfArguments
 	}
+	pattern := string(cmd.Args[1])
+	scanPattern := trimPattern(pattern)
 	return m.Apply(conn, cmd, nil,
 		func(interface{}) (interface{}, error) {
 			kvm.mu.RLock()
 			defer kvm.mu.RUnlock()
 			var keys [][]byte
-			var values [][]byte
-
-			err := kvm.db.Fold(func(key []byte) error {
-				keys = append(keys, []byte(key))
-				if withvalues {
-					value, err := kvm.db.Get(key)
-					if err != nil {
-						return err
-					}
-					values = append(values, value)
+			err := kvm.db.Scan([]byte(scanPattern), func(key []byte) error {
+				if ok, _ := filepath.Match(pattern, string(key)); ok {
+					keys = append(keys, []byte(key))
 				}
 				return nil
 			})
 			if err != nil {
 				return nil, err
 			}
-			if withvalues {
-				conn.WriteArray(len(keys) * 2)
-			} else {
-				conn.WriteArray(len(keys))
-			}
+			conn.WriteArray(len(keys))
 			for i := 0; i < len(keys); i++ {
 				conn.WriteBulk(keys[i])
-				if withvalues {
-					conn.WriteBulk(values[i])
-				}
 			}
 			return nil, nil
 		},
