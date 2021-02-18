@@ -1,3 +1,4 @@
+ARG BASE=alpine:latest
 ARG GOOS=linux
 ARG GOARCH=amd64
  
@@ -20,9 +21,7 @@ RUN CGO_ENABLED=0 GOOS=${GOOS} GOARCH=${GOARCH} GO111MODULE=on go build -a -o bi
 
 RUN mkdir data
 
-# Use distroless as minimal base image
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot
+FROM $BASE 
 WORKDIR /app
 COPY --from=builder /workspace/bitraft .
 COPY --from=builder --chown=65532:65532 /workspace/data /data
